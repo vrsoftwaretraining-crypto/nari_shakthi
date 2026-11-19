@@ -1,0 +1,8 @@
+# Developed by Codesoftwares
+*.jks
+*.keystore
+key.properties
+.env
+backend/media/
+.dart_tool/
+build/

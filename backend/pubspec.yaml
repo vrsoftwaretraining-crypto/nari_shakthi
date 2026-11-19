@@ -1,0 +1,14 @@
+# Developed by Codesoftwares
+name: nari_shakthi_api
+description: Nari Shakthi Matrimony matrimonial API (Dart Shelf + PostgreSQL)
+version: 0.1.0
+environment:
+  sdk: ^3.3.0
+dependencies:
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  postgres: ^3.0.0
+  dart_jsonwebtoken: ^2.12.2
+  dbcrypt: ^2.0.0
+  mailer: ^6.1.0
+  crypto: ^3.0.3
