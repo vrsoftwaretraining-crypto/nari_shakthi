@@ -64,10 +64,10 @@ class _SearchScreenState extends State<SearchScreen> {
           subtitle: [m['occupation'], m['location']].where((e) => e != null && '$e'.isNotEmpty).join(' • '),
           badge: maritalOptions[m['marital_status']],
           actions: _public
-              ? [AppButton('Sign in to connect', icon: Icons.lock_open, onPressed: widget.onNeedLogin)]
+              ? [TileButton('Sign in to connect', icon: Icons.lock_open, onPressed: widget.onNeedLogin)]
               : [
-                  AppButton('Send interest', icon: Icons.favorite_border, onPressed: () => guarded(c, () async => (await Api.call('POST', '/interests/${m['user_id']}'))['message'] as String)),
-                  AppButton('Shortlist', icon: Icons.star_border, kind: BtnKind.secondary, onPressed: () => guarded(c, () async => (await Api.call('PUT', '/shortlist/${m['user_id']}'))['message'] as String)),
+                  TileButton('Send interest', icon: Icons.favorite_border, onPressed: () => guarded(c, () async => (await Api.call('POST', '/interests/${m['user_id']}'))['message'] as String)),
+                  TileButton('Shortlist', icon: Icons.star_border, kind: BtnKind.secondary, onPressed: () => guarded(c, () async => (await Api.call('PUT', '/shortlist/${m['user_id']}'))['message'] as String)),
                 ],
         ),
       );

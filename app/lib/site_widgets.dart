@@ -5,7 +5,36 @@ import 'stories.dart';
 import 'theme.dart';
 
 const double kSiteWidth = 1160;
-const String kSerif = 'serif';
+
+/// Fades and slides its child in once.
+class FadeIn extends StatelessWidget {
+  final Widget child;
+  final int delayMs;
+  const FadeIn({super.key, required this.child, this.delayMs = 0});
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1), duration: Duration(milliseconds: 800 + delayMs), curve: Curves.easeOutCubic,
+        builder: (c, v, ch) => Opacity(opacity: v.clamp(0.0, 1.0).toDouble(), child: Transform.translate(offset: Offset(0, 26 * (1 - v)), child: ch)),
+        child: child,
+      );
+}
+
+/// Lifts its child a little when the mouse is over it (website).
+class HoverLift extends StatefulWidget {
+  final Widget child;
+  const HoverLift({super.key, required this.child});
+  @override
+  State<HoverLift> createState() => _HoverLiftState();
+}
+
+class _HoverLiftState extends State<HoverLift> {
+  bool _h = false;
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+        onEnter: (_) => setState(() => _h = true), onExit: (_) => setState(() => _h = false),
+        child: AnimatedContainer(duration: const Duration(milliseconds: 220), curve: Curves.easeOut, transform: Matrix4.translationValues(0, _h ? -8 : 0, 0), child: widget.child),
+      );
+}
 
 /// A picture from assets with a warm gradient if the file is missing.
 class SiteImage extends StatelessWidget {
@@ -57,7 +86,7 @@ class SiteHeading extends StatelessWidget {
         Text(eyebrow.toUpperCase(), style: const TextStyle(letterSpacing: 4, fontSize: 13, fontWeight: FontWeight.w800, color: Palette.marigold)),
         const SizedBox(height: 10),
         Text(title, textAlign: center ? TextAlign.center : TextAlign.start,
-            style: TextStyle(fontFamily: kSerif, fontSize: 38, fontWeight: FontWeight.w800, height: 1.2, color: light ? Colors.white : Palette.plumDeep)),
+            style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 38, fontWeight: FontWeight.w800, height: 1.2, color: light ? Colors.white : Palette.plumDeep)),
         if (sub != null) ...[
           const SizedBox(height: 12),
           ConstrainedBox(constraints: const BoxConstraints(maxWidth: 720),
@@ -79,7 +108,7 @@ class PageBanner extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 60),
           child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 820), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: kSerif, fontSize: 48, fontWeight: FontWeight.w800, color: Colors.white, height: 1.15)),
+            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 48, fontWeight: FontWeight.w800, color: Colors.white, height: 1.15)),
             const SizedBox(height: 14),
             Container(height: 3, width: 70, decoration: BoxDecoration(color: Palette.marigold, borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 14),
@@ -94,7 +123,7 @@ class FeatureCard extends StatelessWidget {
   final String title, text;
   const FeatureCard(this.icon, this.title, this.text, {super.key});
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => HoverLift(child: Container(
       padding: const EdgeInsets.all(26),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: Palette.plum.withOpacity(.14)),
           boxShadow: [BoxShadow(color: Palette.plum.withOpacity(.07), blurRadius: 24, offset: const Offset(0, 10))]),
@@ -104,14 +133,14 @@ class FeatureCard extends StatelessWidget {
         Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
         const SizedBox(height: 8),
         Text(text, style: const TextStyle(fontSize: 15.5, height: 1.55, color: Colors.black54)),
-      ]));
+      ])));
 }
 
 class StoryCard extends StatelessWidget {
   final Story story;
   const StoryCard(this.story, {super.key});
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => HoverLift(child: Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: Palette.plum.withOpacity(.14)),
           boxShadow: [BoxShadow(color: Palette.plum.withOpacity(.08), blurRadius: 24, offset: const Offset(0, 10))]),
@@ -120,14 +149,14 @@ class StoryCard extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(22),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(story.title, style: const TextStyle(fontFamily: kSerif, fontSize: 22, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
+            Text(story.title, style: const TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 22, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
             const SizedBox(height: 10),
             Text(story.text, style: const TextStyle(fontSize: 15.5, height: 1.6, color: Colors.black54)),
             const SizedBox(height: 12),
             const Text('Illustrative story', style: TextStyle(fontSize: 12.5, color: Palette.marigold, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700)),
           ]),
         ),
-      ]));
+      ])));
 }
 
 /// Large rotating quote over a picture.
@@ -162,7 +191,7 @@ class _QuoteBandState extends State<QuoteBand> {
           const Icon(Icons.format_quote, size: 56, color: Palette.marigold),
           AnimatedSwitcher(duration: const Duration(milliseconds: 700),
               child: Text(successQuotes[_q], key: ValueKey(_q), textAlign: TextAlign.center,
-                  style: const TextStyle(fontFamily: kSerif, fontSize: 38, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700, color: Colors.white, height: 1.35))),
+                  style: const TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 38, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700, color: Colors.white, height: 1.35))),
           const SizedBox(height: 26),
           Row(mainAxisSize: MainAxisSize.min, children: [for (var i = 0; i < successQuotes.length; i++) Container(width: i == _q ? 26 : 8, height: 8, margin: const EdgeInsets.symmetric(horizontal: 3),
               decoration: BoxDecoration(color: i == _q ? Palette.marigold : Colors.white38, borderRadius: BorderRadius.circular(4)))]),

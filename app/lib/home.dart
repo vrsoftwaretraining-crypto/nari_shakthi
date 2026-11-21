@@ -6,6 +6,7 @@ import 'inbox_screen.dart';
 import 'payment_screen.dart';
 import 'profile_screen.dart';
 import 'screen_guard.dart';
+import 'change_password_screen.dart';
 import 'search_screen.dart';
 import 'setup_admin_screen.dart';
 import 'theme.dart';
@@ -34,7 +35,7 @@ class _HomeState extends State<Home> {
   }
 
   static const _msgs = {
-    'contact_request': 'Someone requested your contact details.', 'contact_accepted': 'Your contact request was accepted.',
+    'marriage_confirmed': 'Congratulations! Your marriage has been confirmed.', 'contact_request': 'Someone requested your contact details.', 'contact_accepted': 'Your contact request was accepted.',
     'interest_received': 'Someone sent you an interest.', 'interest_accepted': 'Your interest was accepted.',
     'message_received': 'You have a new message.', 'profile_approved': 'Your profile was approved.', 'profile_rejected': 'Your profile was not approved.',
     'profile_suspended': 'Your account was suspended.', 'payment_verified': 'Your payment was verified.', 'payment_rejected': 'Your payment could not be verified.',
@@ -74,6 +75,7 @@ class _HomeState extends State<Home> {
     return Scaffold(
       appBar: AppBar(backgroundColor: Colors.transparent, title: Text(tabs[_i].$1, style: const TextStyle(fontWeight: FontWeight.w800, color: Palette.plum)),
           actions: [if (!admin) IconButton(tooltip: 'Notifications', icon: const Icon(Icons.notifications_none), onPressed: _notifications),
+                    if (role != 'setup') IconButton(tooltip: 'Change password', icon: const Icon(Icons.lock_reset), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()))),
                     IconButton(tooltip: 'Sign out', icon: const Icon(Icons.logout), onPressed: widget.onSignedOut)]),
       body: IndexedStack(index: _i, children: [for (final t in tabs) t.$3]),
       bottomNavigationBar: admin ? null : NavigationBar(

@@ -253,6 +253,7 @@ Future<Response> memberProfile(Request r, String id) async {
   final res = await q('SELECT row_to_json(p), u.status FROM profiles p JOIN users u ON u.id=p.user_id WHERE p.user_id=@i', {'i': id});
   if (res.isEmpty || (!self && !admin && res.first[1] != 'approved')) throw _Http(404, 'Profile not found.');
   final p = Map<String, dynamic>.from(res.first[0] as Map), full = self || admin;
+  if (!full) await q('INSERT INTO profile_views(viewer,viewed) VALUES(@u,@i) ON CONFLICT DO NOTHING', {'u': uid, 'i': id}); // counted once per viewer per day for the admin reports
   final cr = await q('SELECT status FROM contact_requests WHERE from_user=@u AND to_user=@i', {'u': uid, 'i': id});
   final crStatus = cr.isEmpty ? null : cr.first[0] as String;
   final it = await q('SELECT id::text, status, (to_user=@u) FROM interests WHERE (from_user=@u AND to_user=@i) OR (from_user=@i AND to_user=@u)', {'u': uid, 'i': id});
@@ -301,7 +302,7 @@ Future<Response> contactRequestsIncoming(Request r) async {
 
 Future<Response> respondContact(Request r, String id) async {
   final uid = _uid(r), accept = (await _body(r))['accept'] == true;
-  final res = await q("UPDATE contact_requests SET status=@s WHERE id=@i AND to_user=@u AND status IN ('pending','accepted') RETURNING from_user::text",
+  final res = await q("UPDATE contact_requests SET status=@s, responded_at=now() WHERE id=@i AND to_user=@u AND status IN ('pending','accepted') RETURNING from_user::text",
       {'s': accept ? 'accepted' : 'declined', 'i': id, 'u': uid});
   if (res.isEmpty) throw _Http(404, 'Request not found.');
   if (accept) await q("INSERT INTO notifications(user_id,kind,ref_id) VALUES(@f,'contact_accepted',@i)", {'f': res.first[0], 'i': id});
@@ -316,7 +317,7 @@ Future<Response> search(Request r) async {
   final res = await q('''SELECT p.user_id::text AS user_id,p.name,p.age,p.gender,p.location,p.education,p.occupation,p.marital_status,p.has_children,
       (SELECT id::text FROM photos WHERE user_id=p.user_id ORDER BY created_at LIMIT 1) AS photo_id
     FROM profiles p JOIN users u ON u.id=p.user_id
-    WHERE u.status='approved' AND p.user_id<>@me
+    WHERE u.status='approved' AND u.matched_at IS NULL AND p.user_id<>@me
       AND (@g::text IS NULL OR p.gender=@g) AND (@amin::int IS NULL OR p.age>=@amin) AND (@amax::int IS NULL OR p.age<=@amax)
       AND (@loc::text IS NULL OR p.location ILIKE '%'||@loc||'%') AND (@ms::text IS NULL OR p.marital_status=@ms)
       AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker=@me AND b.blocked=p.user_id) OR (b.blocker=p.user_id AND b.blocked=@me))
@@ -331,7 +332,7 @@ Future<Response> publicSearch(Request r) async {
   final p = r.url.queryParameters, page = (int.tryParse(p['page'] ?? '0') ?? 0).clamp(0, 4).toInt();
   final res = await q('''SELECT split_part(p.name,' ',1) AS name,p.age,p.gender,p.location,p.education,p.occupation,p.marital_status,p.has_children
     FROM profiles p JOIN users u ON u.id=p.user_id
-    WHERE u.status='approved' AND u.role='member'
+    WHERE u.status='approved' AND u.role='member' AND u.matched_at IS NULL
       AND (@g::text IS NULL OR p.gender=@g) AND (@amin::int IS NULL OR p.age>=@amin) AND (@amax::int IS NULL OR p.age<=@amax)
       AND (@loc::text IS NULL OR p.location ILIKE '%'||@loc||'%') AND (@ms::text IS NULL OR p.marital_status=@ms)
     ORDER BY p.updated_at DESC LIMIT 20 OFFSET @off''',
@@ -356,7 +357,7 @@ Future<Response> sendInterest(Request r, String target) async {
 
 Future<Response> respond(Request r, String id) async {
   final uid = _uid(r), accept = (await _body(r))['accept'] == true;
-  final res = await q("UPDATE interests SET status=@s WHERE id=@i AND to_user=@u AND status='sent' RETURNING from_user",
+  final res = await q("UPDATE interests SET status=@s, responded_at=now() WHERE id=@i AND to_user=@u AND status='sent' RETURNING from_user",
       {'s': accept ? 'accepted' : 'rejected', 'i': id, 'u': uid});
   if (res.isEmpty) throw _Http(404, 'Interest request not found.');
   if (accept) await q("INSERT INTO notifications(user_id,kind,ref_id) VALUES(@f,'interest_accepted',@i)", {'f': res.first[0], 'i': id});
@@ -383,9 +384,9 @@ Future<Response> shortlist(Request r, String target, bool add) async {
 // ---- Private media (stored outside any public path; served only through authorised endpoints)
 final mediaDir = Directory(env['MEDIA_DIR'] ?? 'media')..createSync(recursive: true);
 
-Future<String> _saveImage(Request r) async {
+Future<String> _saveImage(Request r, [Map<String, dynamic>? body]) async {
   if ((int.tryParse(r.headers['content-length'] ?? '') ?? 0) > 3 * 1024 * 1024) throw _Http(413, 'Image is too large. Maximum 2 MB.');
-  final b = await _body(r);
+  final b = body ?? await _body(r);
   List<int> bytes;
   try { bytes = base64Decode(b['data'] as String); } catch (_) { throw _Http(400, 'Invalid image.'); }
   if (bytes.length > 2 * 1024 * 1024) throw _Http(413, 'Image is too large. Maximum 2 MB.');
@@ -479,8 +480,11 @@ Future<Response> notifications(Request r) async {
 
 // ---- Payments (UPI QR + screenshot, verified by an admin)
 Future<Response> addPayment(Request r) async {
-  final uid = _uid(r), key = await _saveImage(r);
-  await q('INSERT INTO payments(user_id,screenshot_key) VALUES(@u,@k)', {'u': uid, 'k': key});
+  final uid = _uid(r), b = await _body(r), amt = b['amount_rupees'], ref = _opt(b['txn_ref']);
+  if (amt != null && (amt is! int || amt < 1 || amt > 100000)) throw _Http(400, 'Amount must be between 1 and 100000 rupees.');
+  if (ref != null && ref.length > 40) throw _Http(400, 'The transaction ID is too long.');
+  final key = await _saveImage(r, b);
+  await q('INSERT INTO payments(user_id,screenshot_key,amount_paise,txn_ref) VALUES(@u,@k,@amt,@ref)', {'u': uid, 'k': key, 'amt': amt == null ? null : amt * 100, 'ref': ref});
   log('info', 'payment_uploaded', {'user': uid});
   return _json({'message': 'Screenshot uploaded. We will verify it shortly.'}, 201);
 }
@@ -597,7 +601,7 @@ bool _sigOk(String data, String sig, String key) {
 }
 
 Future<void> _markPaid(String orderId, String payId) async {
-  final res = await q("UPDATE payments SET status='verified', rzp_payment_id=@p WHERE rzp_order_id=@o AND status='created' RETURNING user_id::text", {'p': payId, 'o': orderId});
+  final res = await q("UPDATE payments SET status='verified', verified_at=now(), rzp_payment_id=@p WHERE rzp_order_id=@o AND status='created' RETURNING user_id::text", {'p': payId, 'o': orderId});
   if (res.isNotEmpty) {
     await q("INSERT INTO notifications(user_id,kind) VALUES(@t,'payment_verified')", {'t': res.first[0]});
     log('info', 'razorpay_paid', {'user': res.first[0]});
@@ -638,6 +642,100 @@ Future<Response> rzpWebhook(Request r) async {
   final pay = ((ev['payload'] as Map?)?['payment'] as Map?)?['entity'] as Map?;
   if (pay != null && (ev['event'] == 'payment.captured' || ev['event'] == 'order.paid')) await _markPaid('${pay['order_id']}', '${pay['id']}');
   return _json({'ok': true});
+}
+
+// ---- Marriages: a member of an accepted interest reports it, an admin confirms it, and both profiles leave search
+Future<Response> reportMarried(Request r, String id) async {
+  final uid = _uid(r);
+  final res = await q('''SELECT i.from_user::text, i.to_user::text, pf.name, pt.name FROM interests i
+      LEFT JOIN profiles pf ON pf.user_id=i.from_user LEFT JOIN profiles pt ON pt.user_id=i.to_user
+      WHERE i.id=@i AND i.status='accepted' AND (i.from_user=@u OR i.to_user=@u)''', {'i': id, 'u': uid});
+  if (res.isEmpty) throw _Http(404, 'Accepted interest not found.');
+  final x = res.first;
+  try {
+    await q('INSERT INTO marriages(interest_id,user_a,user_b,names,reported_by) VALUES(@i,@f,@t,@n,@u)', {'i': id, 'f': x[0], 't': x[1], 'n': '${x[2] ?? 'Member'} & ${x[3] ?? 'Member'}', 'u': uid});
+  } on UniqueViolationException {
+    throw _Http(409, 'This marriage has already been reported.');
+  }
+  log('info', 'marriage_reported', {'user': uid});
+  return _json({'message': 'Congratulations! Our team will confirm it shortly.'}, 201);
+}
+
+Future<Response> adminMarriages(Request r) async {
+  await _admin(r);
+  final st = r.url.queryParameters['status'];
+  final res = await q("SELECT id::text AS id, status, names, reported_at::text AS reported_at, decided_at::text AS decided_at FROM marriages WHERE (@s::text IS NULL OR status=@s) ORDER BY reported_at DESC LIMIT 100",
+      {'s': (st == null || st == 'all') ? null : st});
+  return _json({'items': res.map((x) => x.toColumnMap()).toList()});
+}
+
+Future<Response> adminDecideMarriage(Request r, String id) async {
+  final admin = await _admin(r), ok = (await _body(r))['confirm'] == true;
+  final res = await q("UPDATE marriages SET status=@s, decided_at=now(), decided_by=@u WHERE id=@i AND status='reported' RETURNING user_a::text, user_b::text",
+      {'s': ok ? 'confirmed' : 'rejected', 'u': admin, 'i': id});
+  if (res.isEmpty) throw _Http(404, 'Pending marriage report not found.');
+  if (ok) {
+    for (final who in [res.first[0], res.first[1]]) {
+      if (who == null) continue;
+      await q('UPDATE users SET matched_at=now() WHERE id=@t', {'t': who});
+      await q("INSERT INTO notifications(user_id,kind) VALUES(@t,'marriage_confirmed')", {'t': who});
+    }
+  }
+  await q("INSERT INTO audit_log(actor,action) VALUES(@u,@act)", {'u': admin, 'act': ok ? 'marriage_confirmed' : 'marriage_rejected'});
+  return _json({'message': ok ? 'Marriage confirmed. Both profiles are removed from search.' : 'Report rejected.'});
+}
+
+// ---- Admin reports: weekly / monthly numbers and the monthly member list
+String _ymd(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+Future<Response> adminInsights(Request r) async {
+  await _admin(r);
+  final qp = r.url.queryParameters, unit = qp['period'] == 'month' ? 'month' : 'week';
+  final n = (int.tryParse(qp['count'] ?? '') ?? (unit == 'week' ? 8 : 12)).clamp(1, 24).toInt();
+  final now = DateTime.now().toUtc(), today = DateTime.utc(now.year, now.month, now.day);
+  final starts = <DateTime>[for (var i = n - 1; i >= 0; i--) unit == 'week' ? today.subtract(Duration(days: today.weekday - 1 + 7 * i)) : DateTime.utc(now.year, now.month - i, 1)];
+  final from = _ymd(starts.first);
+  String ts(String col) => "date_trunc('$unit', $col AT TIME ZONE 'UTC')::date::text";
+  String dt(String col) => "date_trunc('$unit', $col::timestamp)::date::text";
+  Future<Map<String, int>> m(String sql) async {
+    final res = await q(sql, {'from': from});
+    return {for (final x in res) x[0] as String: (x[1] as num).toInt()};
+  }
+  final regs = await m("SELECT ${ts('created_at')}, count(*) FROM users WHERE role='member' AND created_at >= @from::date GROUP BY 1");
+  final views = await m("SELECT ${dt('day')}, count(*) FROM profile_views WHERE day >= @from::date GROUP BY 1");
+  final viewers = await m("SELECT ${dt('day')}, count(DISTINCT viewer) FROM profile_views WHERE day >= @from::date GROUP BY 1");
+  final sent = await m("SELECT ${ts('created_at')}, count(*) FROM interests WHERE created_at >= @from::date GROUP BY 1");
+  final accepted = await m("SELECT ${ts('responded_at')}, count(*) FROM interests WHERE status='accepted' AND responded_at >= @from::date GROUP BY 1");
+  final creq = await m("SELECT ${ts('created_at')}, count(*) FROM contact_requests WHERE created_at >= @from::date GROUP BY 1");
+  final cacc = await m("SELECT ${ts('responded_at')}, count(*) FROM contact_requests WHERE status='accepted' AND responded_at >= @from::date GROUP BY 1");
+  final marr = await m("SELECT ${ts('decided_at')}, count(*) FROM marriages WHERE status='confirmed' AND decided_at >= @from::date GROUP BY 1");
+  final pays = await m("SELECT ${ts('verified_at')}, count(*) FROM payments WHERE status='verified' AND verified_at >= @from::date GROUP BY 1");
+  final amounts = await m("SELECT ${ts('verified_at')}, coalesce(sum(amount_paise),0)/100 FROM payments WHERE status='verified' AND verified_at >= @from::date GROUP BY 1");
+  final rows = [for (final s in starts) {
+    'start': _ymd(s), 'registrations': regs[_ymd(s)] ?? 0, 'profile_views': views[_ymd(s)] ?? 0, 'viewers': viewers[_ymd(s)] ?? 0,
+    'interests_sent': sent[_ymd(s)] ?? 0, 'interests_accepted': accepted[_ymd(s)] ?? 0, 'contact_requests': creq[_ymd(s)] ?? 0,
+    'contacts_shared': cacc[_ymd(s)] ?? 0, 'marriages': marr[_ymd(s)] ?? 0, 'payments': pays[_ymd(s)] ?? 0, 'payment_amount': amounts[_ymd(s)] ?? 0,
+  }];
+  final st = await q("SELECT status, count(*) FROM users WHERE role='member' GROUP BY 1");
+  final byStatus = {for (final x in st) x[0] as String: (x[1] as num).toInt()};
+  final mar = (await q("SELECT count(*) FROM marriages WHERE status='confirmed'")).first[0] as num;
+  final amt = (await q("SELECT coalesce(sum(amount_paise),0)/100 FROM payments WHERE status='verified'")).first[0] as num;
+  return _json({'period': unit, 'rows': rows, 'totals': {'members': byStatus.values.fold<int>(0, (a, b) => a + b), 'approved': byStatus['approved'] ?? 0, 'pending': byStatus['pending'] ?? 0,
+    'suspended': byStatus['suspended'] ?? 0, 'marriages': mar.toInt(), 'payment_amount': amt.toInt()}});
+}
+
+Future<Response> adminMemberReport(Request r) async {
+  await _admin(r);
+  final month = r.url.queryParameters['month'] ?? '';
+  if (!RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(month)) throw _Http(400, 'Choose a month like 2026-11.');
+  final res = await q('''SELECT u.email, u.status, u.created_at::date::text AS joined, p.name, p.age, p.gender, p.location, p.marital_status, p.education, p.occupation, p.phone,
+      (SELECT count(*) FROM interests i WHERE i.from_user=u.id) AS interests_sent,
+      (SELECT count(*) FROM interests i WHERE i.to_user=u.id) AS interests_received,
+      (SELECT count(*) FROM interests i WHERE (i.from_user=u.id OR i.to_user=u.id) AND i.status='accepted') AS connections,
+      (SELECT count(*) FROM profile_views v WHERE v.viewed=u.id) AS profile_views
+    FROM users u LEFT JOIN profiles p ON p.user_id=u.id
+    WHERE u.role='member' AND to_char(u.created_at AT TIME ZONE 'UTC','YYYY-MM')=@m ORDER BY u.created_at''', {'m': month});
+  return _json({'month': month, 'items': res.map((x) => x.toColumnMap()).toList()});
 }
 
 // ---- Admin (role re-checked in the database on every call, every action audited)
@@ -702,12 +800,14 @@ Future<Response> adminSetStatus(Request r, String id) async {
 
 Future<Response> adminPayments(Request r) async {
   await _admin(r);
-  final res = await q('''SELECT pay.id::text AS id, pay.status, pay.method, pay.created_at::text AS created_at, u.email
-    FROM payments pay JOIN users u ON u.id=pay.user_id WHERE (@s::text IS NULL OR pay.status=@s) ORDER BY pay.created_at DESC LIMIT 100''',
-      {'s': r.url.queryParameters['status']});
+  final st = r.url.queryParameters['status'];
+  final res = await q('''SELECT pay.id::text AS id, pay.status, pay.method, pay.created_at::text AS created_at, pay.verified_at::text AS verified_at,
+      u.email, p.name, (pay.amount_paise/100) AS amount_rupees, pay.txn_ref, pay.admin_note, a.email AS verified_by_email, (pay.screenshot_key IS NOT NULL) AS has_screenshot
+    FROM payments pay JOIN users u ON u.id=pay.user_id LEFT JOIN profiles p ON p.user_id=pay.user_id LEFT JOIN users a ON a.id=pay.verified_by
+    WHERE pay.status<>'created' AND (@s::text IS NULL OR pay.status=@s) ORDER BY pay.created_at DESC LIMIT 200''',
+      {'s': (st == null || st == 'all') ? null : st});
   return _json({'items': res.map((x) => x.toColumnMap()).toList()});
 }
-
 Future<Response> adminScreenshot(Request r, String id) async {
   await _admin(r);
   final res = await q('SELECT screenshot_key FROM payments WHERE id=@i', {'i': id});
@@ -716,9 +816,10 @@ Future<Response> adminScreenshot(Request r, String id) async {
 }
 
 Future<Response> adminVerify(Request r, String id) async {
-  final admin = await _admin(r), ok = (await _body(r))['approve'] == true;
-  final res = await q("UPDATE payments SET status=@s, verified_by=@a WHERE id=@i AND status='pending' RETURNING user_id",
-      {'s': ok ? 'verified' : 'rejected', 'a': admin, 'i': id});
+  final admin = await _admin(r), b = await _body(r), ok = b['approve'] == true, note = _opt(b['note']), amt = b['amount_rupees'];
+  if (amt != null && (amt is! int || amt < 1 || amt > 100000)) throw _Http(400, 'Amount must be between 1 and 100000 rupees.');
+  final res = await q("UPDATE payments SET status=@s, verified_by=@a, verified_at=now(), admin_note=@note, amount_paise=COALESCE(@amt::int*100, amount_paise) WHERE id=@i AND status='pending' RETURNING user_id",
+      {'s': ok ? 'verified' : 'rejected', 'a': admin, 'note': note, 'amt': amt, 'i': id});
   if (res.isEmpty) throw _Http(404, 'Pending payment not found.');
   await q('INSERT INTO notifications(user_id,kind,ref_id) VALUES(@t,@k,@i)', {'t': res.first[0], 'k': ok ? 'payment_verified' : 'payment_rejected', 'i': id});
   await q('INSERT INTO audit_log(actor,action,target) VALUES(@u,@act,@t)', {'u': admin, 'act': ok ? 'payment_verified' : 'payment_rejected', 't': res.first[0]});
@@ -792,6 +893,22 @@ Future<void> _sendMail(String to, String subject, String body) async {
   } catch (e) {
     log('error', 'mail_failed', {'error': e.runtimeType.toString()}); // never log the body (it holds the code)
   }
+}
+
+/// Signed-in users (admins and members) change their password by giving the old one.
+Future<Response> changePassword(Request r) async {
+  final uid = _uid(r), b = await _body(r), oldPw = b['old_password'] as String? ?? '', newPw = b['new_password'] as String? ?? '';
+  if (newPw.length < 8) throw _Http(400, 'The new password must be at least 8 characters.');
+  if (newPw == oldPw) throw _Http(400, 'The new password must be different from the old one.');
+  final res = await q('SELECT password_hash FROM users WHERE id=@u', {'u': uid});
+  if (res.isEmpty || !DBCrypt().checkpw(oldPw, res.first[0] as String)) {
+    log('warn', 'password_change_failed', {'user': uid});
+    throw _Http(400, 'The old password is not correct.');
+  }
+  await q('UPDATE users SET password_hash=@h WHERE id=@u', {'h': DBCrypt().hashpw(newPw, DBCrypt().gensalt()), 'u': uid});
+  await q("INSERT INTO audit_log(actor,action) VALUES(@u,'password_changed')", {'u': uid});
+  log('info', 'password_changed', {'user': uid});
+  return _json({'message': 'Your password has been changed.'});
 }
 
 Future<Response> forgot(Request r) async {
@@ -955,6 +1072,7 @@ Future<void> main() async {
     ..get('/public/donate', publicDonate)
     ..get('/public/donate/qr', publicDonateQr)
     ..post('/admin/create-admin', createAdmin)
+    ..post('/auth/change-password', changePassword)
     ..post('/auth/forgot', forgot)
     ..post('/auth/reset', resetPassword)
     ..get('/blocks', listBlocks)
@@ -990,6 +1108,11 @@ Future<void> main() async {
     ..post('/payments/razorpay/order', rzpOrder)
     ..post('/payments/razorpay/verify', rzpVerify)
     ..post('/webhooks/razorpay', rzpWebhook)
+    ..post('/interests/<id>/married', reportMarried)
+    ..get('/admin/marriages', adminMarriages)
+    ..post('/admin/marriages/<id>/decide', adminDecideMarriage)
+    ..get('/admin/insights', adminInsights)
+    ..get('/admin/reports/members', adminMemberReport)
     ..post('/payments', addPayment)
     ..get('/payments/mine', myPayments)
     ..get('/admin/users', adminUsers)

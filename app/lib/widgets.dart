@@ -80,7 +80,7 @@ class MemberTile extends StatelessWidget {
             ]),
             if (actions.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Row(children: [for (var i = 0; i < actions.length; i++) ...[if (i > 0) const SizedBox(width: 10), Expanded(child: actions[i])]]),
+              Wrap(spacing: 10, runSpacing: 10, children: actions),
             ],
           ]),
         )),

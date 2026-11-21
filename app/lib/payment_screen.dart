@@ -49,13 +49,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _upload() => guarded(context, () async {
-        final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 80);
-        if (f == null) return null;
-        final m = await Api.upload('/payments', f);
-        _key.currentState?.reload();
-        return m;
-      });
+  Future<void> _upload() async {
+    final amt = TextEditingController(text: _info?['amount_rupees']?.toString() ?? ''), ref = TextEditingController();
+    String? err;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => AlertDialog(
+          title: const Text('Payment details'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Enter what you paid. The admin checks it against your screenshot.'),
+            const SizedBox(height: 14),
+            TextField(controller: amt, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Amount paid (₹) *', errorText: err, prefixIcon: const Icon(Icons.currency_rupee))),
+            const SizedBox(height: 12),
+            TextField(controller: ref, decoration: const InputDecoration(labelText: 'UPI transaction ID (optional)', prefixIcon: Icon(Icons.tag))),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () {
+                final a = int.tryParse(amt.text.trim());
+                if (a == null || a < 1 || a > 100000) { set(() => err = 'Enter the amount in rupees.'); return; }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Choose screenshot', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await guarded(context, () async {
+      final f = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 80);
+      if (f == null) return null;
+      final m = await Api.upload('/payments', f, extra: {'amount_rupees': int.parse(amt.text.trim()), if (ref.text.trim().isNotEmpty) 'txn_ref': ref.text.trim()});
+      _key.currentState?.reload();
+      return m;
+    });
+  }
 
   // Online payment: server creates the order -> Razorpay checkout -> server verifies the signature.
   Future<void> _payOnline() async {
@@ -137,7 +168,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Widget build(BuildContext context) => AsyncList(
         key: _key, load: () => Api.list('/payments/mine'), emptyText: 'No payments yet.', header: _header(),
         item: (c, m, reload) => MemberTile(
-            title: m['method'] == 'razorpay' ? 'Online payment${m['amount_paise'] != null ? ' ₹${(m['amount_paise'] as int) ~/ 100}' : ''}' : 'UPI screenshot',
+            title: m['method'] == 'razorpay' ? 'Online payment${m['amount_paise'] != null ? ' ₹${(m['amount_paise'] as int) ~/ 100}' : ''}' : 'UPI payment${m['amount_paise'] != null ? ' ₹${(m['amount_paise'] as int) ~/ 100}' : ''}',
             subtitle: '${m['created_at']}'.split('.').first,
             badge: {'pending': 'Waiting for admin', 'verified': 'Verified', 'rejected': 'Rejected, upload again'}[m['status']]),
       );

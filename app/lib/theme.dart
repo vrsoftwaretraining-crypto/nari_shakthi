@@ -11,11 +11,16 @@ class Palette {
 OutlineInputBorder _border(Color c, double w) =>
     OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: c, width: w));
 
+/// Heading font (Lora). Use with fontVariations: kSerifBold for bold headings.
+const String kSerif = 'Lora';
+const List<FontVariation> kSerifBold = [FontVariation('wght', 700)];
+
 ThemeData appTheme() => ThemeData(
       useMaterial3: true,
+      fontFamily: 'Poppins',
       colorScheme: ColorScheme.fromSeed(seedColor: Palette.plum, primary: Palette.plum, secondary: Palette.marigold),
       scaffoldBackgroundColor: Colors.transparent,
-      textTheme: ThemeData.light().textTheme.apply(bodyColor: Palette.ink, displayColor: Palette.ink),
+      textTheme: ThemeData.light().textTheme.apply(fontFamily: 'Poppins', bodyColor: Palette.ink, displayColor: Palette.ink),
       inputDecorationTheme: InputDecorationTheme(
         filled: true, fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
@@ -44,7 +49,7 @@ class AppBackground extends StatelessWidget {
       );
 }
 
-enum BtnKind { primary, secondary, danger }
+enum BtnKind { primary, secondary, danger, success }
 
 /// One button for the whole app: 56px tall, full width, clear label, optional icon, loading state.
 class AppButton extends StatelessWidget {
@@ -86,6 +91,54 @@ class AppButton extends StatelessWidget {
           style: ElevatedButton.styleFrom(minimumSize: size, padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 16), shape: shape, elevation: 0,
               backgroundColor: Colors.transparent, shadowColor: Colors.transparent,
               foregroundColor: Colors.white, disabledBackgroundColor: Colors.transparent, disabledForegroundColor: Colors.white)),
+      ),
+    );
+  }
+}
+
+
+/// Compact pill button for cards and lists (member tiles, requests). Sizes itself to its label, so it never stretches.
+class TileButton extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+  final BtnKind kind;
+  const TileButton(this.label, {super.key, this.icon, this.onPressed, this.kind = BtnKind.primary});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    Gradient? gradient;
+    Color? bg, border;
+    Color fg = Colors.white;
+    switch (kind) {
+      case BtnKind.primary:
+        gradient = const LinearGradient(colors: [Palette.plum, Palette.plumDeep]);
+      case BtnKind.success:
+        gradient = const LinearGradient(colors: [Color(0xFF2E8B57), Color(0xFF1F6B42)]);
+      case BtnKind.danger:
+        bg = Palette.crimson.withOpacity(.08); border = Palette.crimson; fg = Palette.crimson;
+      case BtnKind.secondary:
+        bg = Colors.white; border = Palette.plum; fg = Palette.plum;
+    }
+    return Opacity(
+      opacity: enabled ? 1 : .5,
+      child: Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: BoxDecoration(gradient: gradient, color: bg, borderRadius: BorderRadius.circular(24), border: border == null ? null : Border.all(color: border, width: 1.4),
+              boxShadow: gradient == null ? null : [BoxShadow(color: (gradient as LinearGradient).colors.first.withOpacity(.3), blurRadius: 10, offset: const Offset(0, 4))]),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24), onTap: onPressed,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (icon != null) ...[Icon(icon, size: 18, color: fg), const SizedBox(width: 7)],
+                Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 14)),
+              ]),
+            ),
+          ),
+        ),
       ),
     );
   }

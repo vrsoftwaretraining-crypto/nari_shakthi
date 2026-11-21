@@ -1,0 +1,4 @@
+Fonts bundled with this app:
+  Poppins  (Indian Type Foundry)   - SIL Open Font License 1.1
+  Lora     (Cyreal)                - SIL Open Font License 1.1
+Both may be used and redistributed in apps and websites. License text: https://openfontlicense.org

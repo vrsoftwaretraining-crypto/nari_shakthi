@@ -1,6 +1,7 @@
 // Developed by Codesoftwares
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'admin_insights.dart';
 import 'admin_member_screen.dart';
 import 'api.dart';
 import 'theme.dart';
@@ -10,10 +11,10 @@ class AdminScreen extends StatelessWidget {
   const AdminScreen({super.key});
   @override
   Widget build(BuildContext context) => const DefaultTabController(
-        length: 4,
+        length: 5,
         child: Column(children: [
-          Material(color: Colors.white, child: TabBar(isScrollable: true, tabAlignment: TabAlignment.start, labelColor: Palette.plum, unselectedLabelColor: Colors.black54, indicatorColor: Palette.marigold, indicatorWeight: 3, tabs: [Tab(text: 'Members'), Tab(text: 'Payments'), Tab(text: 'Reports'), Tab(text: 'Payment setup')])),
-          Expanded(child: TabBarView(children: [_Members(), _Payments(), _Reports(), _PaySetup()])),
+          Material(color: Colors.white, child: TabBar(isScrollable: true, tabAlignment: TabAlignment.start, labelColor: Palette.plum, unselectedLabelColor: Colors.black54, indicatorColor: Palette.marigold, indicatorWeight: 3, tabs: [Tab(text: 'Members'), Tab(text: 'Payments'), Tab(text: 'Reports'), Tab(text: 'Complaints'), Tab(text: 'Payment setup')])),
+          Expanded(child: TabBarView(children: [_Members(), _Payments(), AdminInsights(), _Reports(), _PaySetup()])),
         ]),
       );
 }
@@ -58,9 +59,9 @@ class _MembersState extends State<_Members> {
           subtitle: '${m['email']}\n${m['location'] ?? ''}', badge: '${m['status']}',
           actions: [
             // Only the buttons that make sense for the member's current status
-            if (m['status'] != 'approved') AppButton('Approve', icon: Icons.check, compact: true, onPressed: () => _set(c, m['id'], 'approved')),
-            if (m['status'] == 'pending') AppButton('Reject', icon: Icons.close, compact: true, kind: BtnKind.secondary, onPressed: () => _set(c, m['id'], 'rejected')),
-            if (m['status'] == 'approved' || m['status'] == 'pending') AppButton('Suspend', icon: Icons.block, compact: true, kind: BtnKind.danger, onPressed: () => _set(c, m['id'], 'suspended')),
+            if (m['status'] != 'approved') TileButton('Approve', icon: Icons.check, kind: BtnKind.success, onPressed: () => _set(c, m['id'], 'approved')),
+            if (m['status'] == 'pending') TileButton('Reject', icon: Icons.close, kind: BtnKind.secondary, onPressed: () => _set(c, m['id'], 'rejected')),
+            if (m['status'] == 'approved' || m['status'] == 'pending') TileButton('Suspend', icon: Icons.block, kind: BtnKind.danger, onPressed: () => _set(c, m['id'], 'suspended')),
           ],
         ),
       );
@@ -74,26 +75,70 @@ class _Payments extends StatefulWidget {
 
 class _PaymentsState extends State<_Payments> {
   final _key = GlobalKey<AsyncListState>();
+  String _status = 'all';
+  static const _filters = {'all': 'All payments', 'pending': 'Waiting for verification', 'verified': 'Verified', 'rejected': 'Rejected'};
 
-  Future<void> _verify(BuildContext c, String id, bool ok) => guarded(c, () async {
-        final m = (await Api.call('POST', '/admin/payments/$id/verify', body: {'approve': ok}))['message'] as String;
-        _key.currentState?.reload();
-        return m;
-      });
+  Future<void> _decide(BuildContext c, Map<String, dynamic> m, bool ok) async {
+    final amt = TextEditingController(text: m['amount_rupees']?.toString() ?? ''), note = TextEditingController();
+    final go = await showDialog<bool>(
+      context: c,
+      builder: (ctx) => AlertDialog(
+        title: Text(ok ? 'Verify this payment?' : 'Reject this payment?'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (ok) ...[
+            TextField(controller: amt, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount received (₹)', prefixIcon: Icon(Icons.currency_rupee))),
+            const SizedBox(height: 12),
+          ],
+          TextField(controller: note, maxLines: 2, decoration: InputDecoration(labelText: ok ? 'Note (optional)' : 'Reason (optional)')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(ok ? 'Verify' : 'Reject', style: TextStyle(color: ok ? Colors.green.shade800 : Palette.crimson, fontWeight: FontWeight.w800))),
+        ],
+      ),
+    );
+    if (go != true || !c.mounted) return;
+    await guarded(c, () async {
+      final a = int.tryParse(amt.text.trim());
+      final msg = (await Api.call('POST', '/admin/payments/${m['id']}/verify', body: {'approve': ok, 'note': note.text.trim(), if (ok && a != null) 'amount_rupees': a}))['message'] as String;
+      _key.currentState?.reload();
+      return msg;
+    });
+  }
+
+  String _t(Object? v) => '$v'.split('.').first;
 
   @override
   Widget build(BuildContext context) => AsyncList(
-        key: _key, load: () => Api.list('/admin/payments?status=pending'), emptyText: 'No payments waiting for verification.',
-        item: (c, m, reload) => MemberTile(
-          title: '${m['email']}', subtitle: '${m['created_at']}'.split('.').first, badge: 'Pending',
-          actions: [
-            AppButton('View', icon: Icons.image_outlined, compact: true, kind: BtnKind.secondary, onPressed: () => showDialog(context: c, builder: (_) => Dialog(
-                child: InteractiveViewer(child: Image.network('$apiBase/admin/payments/${m['id']}/screenshot', headers: Api.authHeaders,
-                    errorBuilder: (_, __, ___) => const Padding(padding: EdgeInsets.all(24), child: Text('Could not load the screenshot.'))))))),
-            AppButton('Verify', icon: Icons.verified_outlined, compact: true, onPressed: () => _verify(c, m['id'], true)),
-            AppButton('Reject', icon: Icons.close, compact: true, kind: BtnKind.danger, onPressed: () => _verify(c, m['id'], false)),
-          ],
-        ),
+        key: _key,
+        load: () => Api.list('/admin/payments?status=$_status'),
+        emptyText: 'No payments here yet.',
+        header: Padding(padding: const EdgeInsets.only(bottom: 12), child: Drop('Show', _status, _filters, (v) { _status = v!; _key.currentState?.reload(); })),
+        item: (c, m, reload) {
+          final st = m['status'] as String;
+          final lines = [
+            '${m['email']}',
+            '${m['method'] == 'razorpay' ? 'Razorpay (online)' : 'UPI screenshot'}${m['amount_rupees'] != null ? '  •  ₹${m['amount_rupees']}' : ''}',
+            if (m['txn_ref'] != null) 'Transaction ID: ${m['txn_ref']}',
+            'Paid on: ${_t(m['created_at'])}',
+            if (m['verified_at'] != null) '${st == 'rejected' ? 'Rejected' : 'Verified'} on: ${_t(m['verified_at'])}${m['verified_by_email'] != null ? ' by ${m['verified_by_email']}' : ''}',
+            if (m['admin_note'] != null) 'Note: ${m['admin_note']}',
+          ];
+          return MemberTile(
+            title: '${m['name'] ?? m['email']}', subtitle: lines.join('\n'),
+            badge: {'pending': 'Waiting for verification', 'verified': 'Verified', 'rejected': 'Rejected'}[st],
+            actions: [
+              if (m['has_screenshot'] == true)
+                TileButton('Screenshot', icon: Icons.image_outlined, kind: BtnKind.secondary, onPressed: () => showDialog(context: c, builder: (_) => Dialog(
+                    child: InteractiveViewer(child: Image.network('$apiBase/admin/payments/${m['id']}/screenshot', headers: Api.authHeaders,
+                        errorBuilder: (_, __, ___) => const Padding(padding: EdgeInsets.all(24), child: Text('Could not load the screenshot.'))))))),
+              if (st == 'pending') ...[
+                TileButton('Verify', icon: Icons.verified_outlined, kind: BtnKind.success, onPressed: () => _decide(c, m, true)),
+                TileButton('Reject', icon: Icons.close, kind: BtnKind.danger, onPressed: () => _decide(c, m, false)),
+              ],
+            ],
+          );
+        },
       );
 }
 
@@ -120,8 +165,8 @@ class _ReportsState extends State<_Reports> {
           title: '${m['target_name'] ?? m['target_email']}', badge: '${_why[m['reason']] ?? m['reason']} • ${m['report_count']} report(s) in total',
           subtitle: '${m['target_email']} (${m['target_status']})${m['details'] != null ? '\n"${m['details']}"' : ''}',
           actions: [
-            AppButton('Dismiss', icon: Icons.close, compact: true, kind: BtnKind.secondary, onPressed: () => _resolve(c, m['id'], 'dismiss')),
-            AppButton('Suspend', icon: Icons.block, compact: true, kind: BtnKind.danger, onPressed: () => _resolve(c, m['id'], 'suspend')),
+            TileButton('Dismiss', icon: Icons.close, kind: BtnKind.secondary, onPressed: () => _resolve(c, m['id'], 'dismiss')),
+            TileButton('Suspend', icon: Icons.block, kind: BtnKind.danger, onPressed: () => _resolve(c, m['id'], 'suspend')),
           ],
         ),
       );

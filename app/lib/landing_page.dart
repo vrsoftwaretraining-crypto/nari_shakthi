@@ -56,27 +56,28 @@ class _LandingPageState extends State<LandingPage> {
 
   Widget _nav() {
     final fg = _solid ? Palette.plumDeep : Colors.white;
-    Widget link(String label, VoidCallback f, {String? tab}) {
-      final active = tab != null && tab == _tab;
-      return InkWell(
-        onTap: f,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(border: Border(bottom: BorderSide(color: active ? Palette.marigold : Colors.transparent, width: 3))),
-          child: Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 15)),
-        ),
-      );
-    }
-
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 250), height: 72, padding: const EdgeInsets.symmetric(horizontal: 40),
-      decoration: BoxDecoration(color: _solid ? Colors.white : Colors.transparent, boxShadow: _solid ? [BoxShadow(color: Colors.black.withOpacity(.12), blurRadius: 16)] : null),
+      duration: const Duration(milliseconds: 250), height: 78, padding: const EdgeInsets.symmetric(horizontal: 40),
+      decoration: BoxDecoration(
+        color: _solid ? Colors.white.withOpacity(.96) : Colors.transparent,
+        border: _solid ? Border(bottom: BorderSide(color: Palette.marigold.withOpacity(.5), width: 2)) : null,
+        boxShadow: _solid ? [BoxShadow(color: Colors.black.withOpacity(.10), blurRadius: 20, offset: const Offset(0, 6))] : null,
+      ),
       child: Row(children: [
         InkWell(
           onTap: () => _go('home'),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Nari Shakthi', style: TextStyle(fontFamily: kSerif, fontSize: 26, fontWeight: FontWeight.w800, color: fg, height: 1)),
-            const Text('MATRIMONY', style: TextStyle(fontSize: 10.5, letterSpacing: 5, fontWeight: FontWeight.w700, color: Palette.marigold)),
+          child: Row(children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(shape: BoxShape.circle, gradient: const LinearGradient(colors: [Palette.marigold, Palette.crimson]),
+                  boxShadow: [BoxShadow(color: Palette.crimson.withOpacity(.35), blurRadius: 12, offset: const Offset(0, 4))]),
+              child: const Icon(Icons.favorite, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Nari Shakthi', style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 24, color: fg, height: 1.05)),
+              const Text('MATRIMONY', style: TextStyle(fontSize: 10, letterSpacing: 5, fontWeight: FontWeight.w700, color: Palette.marigold)),
+            ]),
           ]),
         ),
         const SizedBox(width: 24),
@@ -84,15 +85,15 @@ class _LandingPageState extends State<LandingPage> {
           child: FittedBox(
             fit: BoxFit.scaleDown, alignment: Alignment.centerRight,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              link('Home', () => _go('home'), tab: 'home'),
-              link('About us', () => _go('about'), tab: 'about'),
-              link('Success stories', () => _go('stories'), tab: 'stories'),
-              link('Donate', () => _go('donate'), tab: 'donate'),
-              link('Search profiles', _search),
+              _NavTab('Home', Icons.home_outlined, active: _tab == 'home', solid: _solid, onTap: () => _go('home')),
+              _NavTab('About us', Icons.info_outline, active: _tab == 'about', solid: _solid, onTap: () => _go('about')),
+              _NavTab('Success stories', Icons.auto_awesome_outlined, active: _tab == 'stories', solid: _solid, onTap: () => _go('stories')),
+              _NavTab('Donate', Icons.volunteer_activism_outlined, active: _tab == 'donate', solid: _solid, onTap: () => _go('donate')),
+              _NavTab('Search profiles', Icons.search, active: false, solid: _solid, onTap: _search),
+              const SizedBox(width: 12),
+              _NavTab('Sign in', Icons.login, active: false, solid: _solid, onTap: () => _auth()),
               const SizedBox(width: 10),
-              link('Sign in', () => _auth()),
-              const SizedBox(width: 14),
-              SitePill('Register free', compact: true, onTap: () => _auth(true)),
+              SitePill('Register free', compact: true, icon: Icons.person_add_alt_1, onTap: () => _auth(true)),
             ]),
           ),
         ),
@@ -128,7 +129,7 @@ class _LandingPageState extends State<LandingPage> {
         padding: const EdgeInsets.all(30),
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.3), blurRadius: 40, offset: const Offset(0, 18))]),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('Find your match', style: TextStyle(fontFamily: kSerif, fontSize: 28, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
+          const Text('Find your match', style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 28, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
           const SizedBox(height: 6),
           const Text('Free to join. Private by design.', style: TextStyle(color: Colors.black54)),
           const SizedBox(height: 22),
@@ -155,10 +156,10 @@ class _LandingPageState extends State<LandingPage> {
               padding: const EdgeInsets.fromLTRB(40, 90, 40, 30),
               child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
                 Expanded(
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  child: FadeIn(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text('EXCLUSIVELY FOR SECOND MARRIAGES', style: TextStyle(letterSpacing: 4, fontSize: 13, fontWeight: FontWeight.w800, color: Palette.marigold)),
                     const SizedBox(height: 18),
-                    const Text('Find your partner for a beautiful second beginning', style: TextStyle(fontFamily: kSerif, fontSize: 54, fontWeight: FontWeight.w800, color: Colors.white, height: 1.12)),
+                    const Text('Find your partner for a beautiful second beginning', style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 54, fontWeight: FontWeight.w800, color: Colors.white, height: 1.12)),
                     const SizedBox(height: 18),
                     const Text('A trusted, private introduction platform for divorced, widowed and legally separated men and women.', style: TextStyle(fontSize: 19, height: 1.55, color: Colors.white70)),
                     const SizedBox(height: 30),
@@ -172,10 +173,10 @@ class _LandingPageState extends State<LandingPage> {
                       _trust(Icons.lock_outline, 'Photos stay private'),
                       _trust(Icons.forum_outlined, 'Chat with consent'),
                     ]),
-                  ]),
+                  ])),
                 ),
                 const SizedBox(width: 40),
-                SizedBox(width: 380, child: _heroCard()),
+                SizedBox(width: 380, child: FadeIn(delayMs: 300, child: _heroCard())),
               ]),
             ),
           ),
@@ -255,7 +256,7 @@ class _LandingPageState extends State<LandingPage> {
           width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 72, horizontal: 32),
           decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Palette.plumDeep, Palette.plum, Palette.crimson])),
           child: Column(children: [
-            const Text('Your next chapter starts here', textAlign: TextAlign.center, style: TextStyle(fontFamily: kSerif, fontSize: 40, fontWeight: FontWeight.w800, color: Colors.white)),
+            const Text('Your next chapter starts here', textAlign: TextAlign.center, style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 40, fontWeight: FontWeight.w800, color: Colors.white)),
             const SizedBox(height: 12),
             const Text('Join free and meet someone who understands your journey.', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: Colors.white70)),
             const SizedBox(height: 28),
@@ -276,7 +277,7 @@ class _LandingPageState extends State<LandingPage> {
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Nari Shakthi', style: TextStyle(fontFamily: kSerif, fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
+                    Text('Nari Shakthi', style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
                     Text('MATRIMONY', style: TextStyle(fontSize: 11, letterSpacing: 5, fontWeight: FontWeight.w700, color: Palette.marigold)),
                     SizedBox(height: 14),
                     Text('A social-service introduction platform for second marriages.', style: TextStyle(color: Colors.white70, height: 1.5)),
@@ -304,6 +305,44 @@ class _LandingPageState extends State<LandingPage> {
           Positioned(top: 0, left: 0, right: 0, child: _nav()),
         ]),
       );
+}
+
+/// One tab in the top menu: pill shape, hover highlight, filled when it is the open page.
+class _NavTab extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final bool active, solid;
+  final VoidCallback onTap;
+  const _NavTab(this.label, this.icon, {required this.active, required this.solid, required this.onTap});
+  @override
+  State<_NavTab> createState() => _NavTabState();
+}
+
+class _NavTabState extends State<_NavTab> {
+  bool _h = false;
+  @override
+  Widget build(BuildContext context) {
+    final solid = widget.solid, active = widget.active;
+    final fg = active ? Colors.white : (solid ? Palette.plumDeep : Colors.white);
+    final bg = active
+        ? (solid ? Palette.plum : Colors.white.withOpacity(.22))
+        : (_h ? (solid ? Palette.plum.withOpacity(.09) : Colors.white.withOpacity(.14)) : Colors.transparent);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _h = true), onExit: (_) => setState(() => _h = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180), margin: const EdgeInsets.symmetric(horizontal: 2), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(30), border: active && !solid ? Border.all(color: Colors.white54) : null),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(widget.icon, size: 17, color: fg), const SizedBox(width: 7),
+            Text(widget.label, style: TextStyle(color: fg, fontWeight: FontWeight.w600, fontSize: 14.5)),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 class _SearchDialog extends StatelessWidget {

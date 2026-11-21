@@ -67,6 +67,6 @@ class Api {
   static Future<List<Map<String, dynamic>>> list(String path, [String key = 'items']) async =>
       ((await call('GET', path))[key] as List).cast<Map<String, dynamic>>();
 
-  static Future<String> upload(String path, XFile f, {String method = 'POST'}) async =>
-      (await call(method, path, body: {'data': base64Encode(await f.readAsBytes())}))['message'] as String;
+  static Future<String> upload(String path, XFile f, {String method = 'POST', Map<String, Object?> extra = const {}}) async =>
+      (await call(method, path, body: {...extra, 'data': base64Encode(await f.readAsBytes())}))['message'] as String;
 }

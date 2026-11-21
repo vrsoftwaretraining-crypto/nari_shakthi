@@ -19,7 +19,7 @@ Widget _ctaBand(String title, String sub, List<Widget> buttons) => Container(
       width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 72, horizontal: 32),
       decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Palette.plumDeep, Palette.plum, Palette.crimson])),
       child: Column(children: [
-        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: kSerif, fontSize: 40, fontWeight: FontWeight.w800, color: Colors.white)),
+        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 40, fontWeight: FontWeight.w800, color: Colors.white)),
         const SizedBox(height: 12),
         Text(sub, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, color: Colors.white70)),
         const SizedBox(height: 28),
@@ -57,7 +57,7 @@ class AboutPage extends StatelessWidget {
                 child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Icon(Icons.format_quote, size: 48, color: Palette.marigold),
                   SizedBox(height: 8),
-                  Text('Every person deserves a second chance at a happy, peaceful life.', style: TextStyle(fontFamily: kSerif, fontSize: 28, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700, color: Colors.white, height: 1.35)),
+                  Text('Every person deserves a second chance at a happy, peaceful life.', style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 28, fontStyle: FontStyle.italic, fontWeight: FontWeight.w700, color: Colors.white, height: 1.35)),
                 ]),
               ),
             ),
@@ -165,7 +165,7 @@ class _DonatePageState extends State<DonatePage> {
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26), border: Border.all(color: Palette.plum.withOpacity(.14)),
           boxShadow: [BoxShadow(color: Palette.plum.withOpacity(.12), blurRadius: 34, offset: const Offset(0, 14))]),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('Scan to donate', style: TextStyle(fontFamily: kSerif, fontSize: 26, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
+        const Text('Scan to donate', style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 26, fontWeight: FontWeight.w800, color: Palette.plumDeep)),
         const SizedBox(height: 6),
         const Text('Use any UPI app', style: TextStyle(color: Colors.black54)),
         const SizedBox(height: 20),

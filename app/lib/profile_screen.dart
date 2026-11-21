@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'api.dart';
 import 'blocked_screen.dart';
+import 'change_password_screen.dart';
 import 'profile_edit_screen.dart';
 import 'profile_widgets.dart';
 import 'theme.dart';
@@ -108,16 +109,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _mini(IconData i, Color c, VoidCallback f) => InkWell(onTap: f, child: CircleAvatar(radius: 13, backgroundColor: c, child: Icon(i, size: 15, color: Colors.white)));
 
-  Widget _photosArea(Map<String, dynamic> p) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (_photos.isEmpty) const Text('No photos yet. Add up to 6 photos.', style: TextStyle(color: Colors.black54))
-        else PhotoStrip(_photos, size: 130, overlay: (id) => Positioned.fill(child: Stack(children: [
-          Positioned(right: 4, top: 4, child: _mini(Icons.close, Palette.crimson, () => _deletePhoto(id))),
-          Positioned(right: 4, bottom: 4, child: _mini(Icons.edit, Palette.plum, () => _replacePhoto(id))),
-        ]))),
-        const SizedBox(height: 12),
-        Text('Photos ${_photos.length}/$_maxPhotos  •  ${p['photos_private'] == false ? 'visible to every signed-in member' : 'private (shown after you accept an interest)'}',
+  Widget _chip(String t) => t.isEmpty
+      ? const SizedBox.shrink()
+      : Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          decoration: BoxDecoration(color: Colors.white.withOpacity(.2), borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white38)),
+          child: Text(t, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)));
+
+  Widget _hero(Map<String, dynamic> p) => Container(
+        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Palette.plum, Palette.crimson]),
+            borderRadius: BorderRadius.circular(26), boxShadow: [BoxShadow(color: Palette.plum.withOpacity(.3), blurRadius: 22, offset: const Offset(0, 10))]),
+        child: Row(children: [
+          Container(padding: const EdgeInsets.all(3), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)), child: Avatar(_photos.isEmpty ? null : _photos.first, size: 84)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${p['name']}', style: const TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 24, color: Colors.white, height: 1.15)),
+              const SizedBox(height: 4),
+              Text('${p['age']} years  •  ${p['location'] ?? ''}', style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 8, runSpacing: 6, children: [_chip(maritalOptions[p['marital_status']] ?? ''), if (p['has_children'] == true) _chip('Has children')]),
+            ]),
+          ),
+        ]),
+      );
+
+  Widget _photoGrid(Map<String, dynamic> p) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        LayoutBuilder(builder: (c, box) {
+          final w = (box.maxWidth - 24) / 3;
+          Widget tile(Widget child) => SizedBox(width: w, height: w, child: child);
+          return Wrap(spacing: 12, runSpacing: 12, children: [
+            for (final id in _photos)
+              tile(ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(fit: StackFit.expand, children: [
+                  GestureDetector(
+                    onTap: () => viewPhotoDialog(context, id),
+                    child: Image.network(Api.photoUrl(id), headers: Api.authHeaders, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(color: Palette.mist, child: const Icon(Icons.broken_image_outlined, color: Palette.plum))),
+                  ),
+                  Positioned(right: 6, top: 6, child: _mini(Icons.close, Palette.crimson, () => _deletePhoto(id))),
+                  Positioned(right: 6, bottom: 6, child: _mini(Icons.edit, Palette.plum, () => _replacePhoto(id))),
+                ]),
+              )),
+            if (_photos.length < _maxPhotos)
+              tile(InkWell(
+                onTap: _addPhoto, borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  decoration: BoxDecoration(color: Palette.blush.withOpacity(.6), borderRadius: BorderRadius.circular(16), border: Border.all(color: Palette.plum.withOpacity(.45), width: 1.6)),
+                  child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.add_a_photo_outlined, color: Palette.plum, size: 28), SizedBox(height: 6),
+                    Text('Add photo', style: TextStyle(color: Palette.plum, fontWeight: FontWeight.w600, fontSize: 12.5)),
+                  ]),
+                ),
+              )),
+          ]);
+        }),
+        const SizedBox(height: 14),
+        Text('${_photos.length} of $_maxPhotos photos  •  ${p['photos_private'] == false ? 'visible to every signed-in member' : 'private (shown after you accept an interest)'}',
             style: const TextStyle(fontSize: 13, color: Colors.black54)),
-        if (_photos.length < _maxPhotos) ...[const SizedBox(height: 12), AppButton('Add photo', icon: Icons.add_a_photo_outlined, kind: BtnKind.secondary, onPressed: _addPhoto)],
       ]);
 
   Widget _contactCard(Map<String, dynamic> p) {
@@ -132,6 +184,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   List<Widget> _footer() => [
+        const SizedBox(height: 12),
+        AppButton('Change password', icon: Icons.lock_reset, kind: BtnKind.secondary, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChangePasswordScreen()))),
         const SizedBox(height: 12),
         AppButton('Blocked members', icon: Icons.block, kind: BtnKind.secondary, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BlockedScreen()))),
         const SizedBox(height: 12),
@@ -157,11 +211,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(padding: const EdgeInsets.all(16), children: [
-        FormCard('${p['name']}', Icons.person_outline, [
-          Text('${p['age']} years  •  ${p['location'] ?? ''}', style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 14),
-          _photosArea(p),
-        ]),
+        _hero(p),
+        FormCard('My photos', Icons.photo_library_outlined, [_photoGrid(p)]),
         ...profileSections(p),
         _contactCard(p),
         AppButton('Edit profile', icon: Icons.edit_outlined, onPressed: _edit),

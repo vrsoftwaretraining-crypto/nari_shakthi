@@ -53,7 +53,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _brand() => Column(children: [
         Text('Nari Shakthi', textAlign: TextAlign.center,
-            style: TextStyle(fontFamily: 'serif', fontSize: 42, fontWeight: FontWeight.w800, color: Palette.plumDeep, height: 1.05,
+            style: TextStyle(fontFamily: kSerif, fontVariations: kSerifBold, fontSize: 42, fontWeight: FontWeight.w800, color: Palette.plumDeep, height: 1.05,
                 shadows: [Shadow(color: Colors.white.withOpacity(.9), blurRadius: 10)])),
         const SizedBox(height: 4),
         const Text('MATRIMONY', style: TextStyle(fontSize: 16, letterSpacing: 9, fontWeight: FontWeight.w700, color: Color(0xFFB07A10))),
